@@ -13,7 +13,6 @@ import re
 import svgwrite
 from fontTools.ttLib import TTFont
 from fontTools.pens.recordingPen import RecordingPen
-import subprocess
 
 # ─────────────────────────────────────────────
 #  Glyph recorder
@@ -238,6 +237,8 @@ def load_configs_from_csv(path):
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
+            if all(v.strip() == "" for v in row.values()):
+                continue
             cfg = {
                 "width_mm": float(row["width_mm"]),
                 "height_mm": float(row["height_mm"]),
@@ -252,6 +253,7 @@ def load_configs_from_csv(path):
                 "line_gap_ratio": float(row["line_gap_ratio"]),
                 "canvas_color":      resolve_color(row.get("canvas_color",      "#000000"), "canvas_color"),
                 "background_color":  resolve_color(row.get("background_color",  "#90EE90"), "background_color"),
+                "canvas_thickness_mm": float(row["canvas_thickness_mm"]) if row.get("canvas_thickness_mm", "").strip() else 1.0,
             }
             configs.append(cfg)
     return configs
@@ -263,6 +265,7 @@ def load_configs_from_csv(path):
 
 if __name__ == "__main__":
     import sys
+    import subprocess
 
     if len(sys.argv) != 2:
         print("Usage: python3 LabelGenerator.py labels.csv")
@@ -271,8 +274,9 @@ if __name__ == "__main__":
     csv_path = sys.argv[1]
     configs = load_configs_from_csv(csv_path)
 
+    width = len(str(len(configs)))
     for i, cfg in enumerate(configs):
-        cfg["output_file"] = f"label_{i+1}.svg"
+        cfg["output_file"] = f"label_{str(i+1).zfill(width)}.svg"
         build_svg(cfg)
-        
+
     subprocess.run(["python3", "stack_svgs.py"], check=True)

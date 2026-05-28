@@ -72,7 +72,7 @@ def pack(items, max_w_mm, col_gap, row_gap):
     """Row-wrap with per-row horizontal centering."""
     rows, current_row, x = [], [], 0.0
     for item in items:
-        w_mm = item[0]
+        w_mm = item[1]
         if x > 0 and x + w_mm > max_w_mm:
             rows.append(current_row)
             current_row, x = [], 0.0
@@ -84,9 +84,9 @@ def pack(items, max_w_mm, col_gap, row_gap):
     placements, y = [], 0.0
     for row in rows:
         last_item, last_x = row[-1]
-        row_w    = last_x + last_item[0]
+        row_w    = last_x + last_item[1]
         x_offset = (max_w_mm - row_w) / 2.0
-        row_h    = max(item[1] for item, _ in row)
+        row_h    = max(item[2] for item, _ in row)
         for item, x_in_row in row:
             placements.append((x_in_row + x_offset, y, item))
         y += row_h + row_gap
@@ -113,7 +113,7 @@ def write_svg(placements, content_h_mm, out_path):
         "fill": "#ffffff",
     })
     for x_mm, y_mm, item in placements:
-        w_mm, h_mm, vb_tuple, src_root, _raw = item
+        _name, w_mm, h_mm, vb_tuple, src_root, _raw = item
         tx, ty = MARGIN_MM + x_mm, MARGIN_MM + y_mm
         vb_x, vb_y, vb_w, vb_h = vb_tuple
         wrapper = ET.SubElement(out, "svg", {
@@ -154,7 +154,7 @@ def write_pdf(placements, out_path):
 
     with tempfile.TemporaryDirectory() as tmp:
         for idx, (x_mm, y_mm, item) in enumerate(placements):
-            w_mm, h_mm, _vb, _root, raw_svg = item
+            _name, w_mm, h_mm, _vb, _root, raw_svg = item
 
             # cairosvg: SVG → single-page vector PDF in memory
             pdf_bytes = cairosvg.svg2pdf(bytestring=raw_svg)
@@ -186,8 +186,9 @@ def write_pdf(placements, out_path):
 def main():
     folder = os.getcwd()
     files  = sorted(
-        f for f in os.listdir(folder)
-        if f.lower().endswith(".svg") and f != "stacked.svg"
+        (f for f in os.listdir(folder)
+         if f.lower().endswith(".svg") and f != "stacked.svg"),
+        key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f)],
     )
 
     if not files:
@@ -199,7 +200,7 @@ def main():
     items = []
     for f in files:
         try:
-            items.append(parse_svg(os.path.join(folder, f)))
+            items.append((f, *parse_svg(os.path.join(folder, f))))
         except Exception as e:
             print(f"  SKIP {f}: {e}")
 
