@@ -12,11 +12,9 @@ Each source SVG must have width="Xmm" height="Ymm" attributes (Inkscape default)
 
 import os
 import re
-import tempfile
 import xml.etree.ElementTree as ET
 
 import cairosvg
-from pypdf import PdfWriter, PdfReader, Transformation
 
 # ── layout parameters ─────────────────────────────────────────────────────────
 A4_W_MM   = 210
@@ -24,7 +22,6 @@ A4_H_MM   = 297
 MARGIN_MM = 10
 COL_GAP   = 1.0   # horizontal gap between labels [mm]
 ROW_GAP   = 1.0   # vertical gap between rows     [mm]
-PT_PER_MM = 72 / 25.4
 # ─────────────────────────────────────────────────────────────────────────────
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -101,8 +98,6 @@ def write_svg(placements, content_h_mm, out_path):
     total_h = content_h_mm + 2 * MARGIN_MM
 
     out = ET.Element("svg", {
-        "xmlns":       SVG_NS,
-        "xmlns:xlink": "http://www.w3.org/1999/xlink",
         "width":       f"{total_w}mm",
         "height":      f"{total_h:.4f}mm",
         "viewBox":     f"0 0 {total_w} {total_h:.4f}",
@@ -135,49 +130,20 @@ def write_svg(placements, content_h_mm, out_path):
 
 # ── PDF output (fully vector) ─────────────────────────────────────────────────
 
-def write_pdf(placements, out_path):
+def write_pdf(placements, content_h_mm, out_path):
     """
-    Each source SVG is converted to a single-page PDF by cairosvg (vector).
-    pypdf then merges each label page onto an A4 blank using a translate
-    transformation.  No rasterisation at any stage.
-
-    Coordinate systems:
-      SVG / screen  — origin top-left,  Y increases downward
-      PDF / ReportLab — origin bottom-left, Y increases upward
-    Conversion:  y_pdf = page_h_pt - y_top_pt - label_h_pt
+    Render the already-composed stacked SVG directly to PDF via cairosvg.
+    Single call, single content stream, no pypdf concatenation bloat.
     """
-    a4_w_pt = A4_W_MM * PT_PER_MM
-    a4_h_pt = A4_H_MM * PT_PER_MM
-
-    writer = PdfWriter()
-    page = writer.add_blank_page(width=a4_w_pt, height=a4_h_pt)
-
-    with tempfile.TemporaryDirectory() as tmp:
-        for idx, (x_mm, y_mm, item) in enumerate(placements):
-            _name, w_mm, h_mm, _vb, _root, raw_svg = item
-
-            # cairosvg: SVG → single-page vector PDF in memory
-            pdf_bytes = cairosvg.svg2pdf(bytestring=raw_svg)
-
-            tmp_pdf = os.path.join(tmp, f"label_{idx:03d}.pdf")
-            with open(tmp_pdf, "wb") as f:
-                f.write(pdf_bytes)
-
-            label_page = PdfReader(tmp_pdf).pages[0]
-
-            # Position: top-left corner of label in pt
-            x_pt     = (MARGIN_MM + x_mm) * PT_PER_MM
-            y_top_pt = (MARGIN_MM + y_mm) * PT_PER_MM
-            # PDF Y origin is at bottom — flip
-            y_pt = a4_h_pt - y_top_pt - (h_mm * PT_PER_MM)
-
-            page.merge_transformed_page(
-                label_page,
-                Transformation().translate(x_pt, y_pt),
-            )
-
-    with open(out_path, "wb") as f:
-        writer.write(f)
+    svg_path = os.path.splitext(out_path)[0] + ".svg"
+    with open(svg_path, "rb") as f:
+        svg_bytes = f.read()
+    cairosvg.svg2pdf(
+        bytestring=svg_bytes,
+        write_to=out_path,
+        output_width=int(A4_W_MM / 25.4 * 72),
+        output_height=int((content_h_mm + 2 * MARGIN_MM) / 25.4 * 72),
+    )
     print(f"PDF → {out_path}")
 
 
@@ -213,7 +179,7 @@ def main():
     print(f"\n{len(placements)} label(s), content height {content_h:.2f} mm\n")
 
     write_svg(placements, content_h, os.path.join(folder, "stacked.svg"))
-    write_pdf(placements,            os.path.join(folder, "stacked.pdf"))
+    write_pdf(placements, content_h, os.path.join(folder, "stacked.pdf"))
 
 
 if __name__ == "__main__":
