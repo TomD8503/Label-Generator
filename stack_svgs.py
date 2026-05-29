@@ -143,8 +143,10 @@ def write_pdf(placements, content_h_mm, out_path):
         write_to=out_path,
         output_width=int(A4_W_MM / 25.4 * 72),
         output_height=int((content_h_mm + 2 * MARGIN_MM) / 25.4 * 72),
+        dpi=72,
     )
-    print(f"PDF → {out_path}")
+
+
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
